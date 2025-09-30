@@ -1,0 +1,85 @@
+version: '3.7'
+
+services:
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    environment:
+      - CLUSTER_NAME=test
+    ports:
+      - "9870:9870"
+      - "8020:8020"
+    volumes:
+      - namenode:/hadoop/dfs/name
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    environment:
+      - CLUSTER_NAME=test
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+    ports:
+      - "9864:9864"
+    volumes:
+      - datanode:/hadoop/dfs/data
+    depends_on:
+      - namenode
+
+  postgres:
+    image: postgres:14
+    container_name: hive-postgres
+    environment:
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hive
+      POSTGRES_DB: metastore
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  metastore:
+    image: apache/hive:4.0.0
+    container_name: hive-metastore
+    command: [
+      "hive",
+      "metastore"
+    ]
+    environment:
+      HIVE_METASTORE_DB_TYPE: postgres
+      HIVE_METASTORE_DB_HOST: postgres
+      HIVE_METASTORE_DB_PORT: 5432
+      HIVE_METASTORE_DB_NAME: metastore
+      HIVE_METASTORE_DB_USER: hive
+      HIVE_METASTORE_DB_PASSWORD: hive
+      # 指定 thrift URI 等配置
+      SERVICE_NAME: metastore
+      # 如果需要也可以 set HIVE_CONF_DIR / custom hive-site.xml
+    ports:
+      - "9083:9083"
+    depends_on:
+      - postgres
+      - namenode
+      - datanode
+
+  hive-server:
+    image: apache/hive:4.0.0
+    container_name: hive-server
+    command: [
+      "hive",
+      "server2"
+    ]
+    environment:
+      SERVICE_NAME: hiveserver2
+      HIVE_METASTORE_URI: thrift://hive-metastore:9083
+      # 如果需要告诉 hive 在 HDFS 环境：CORE_CONF_fs_defaultFS 等
+      CORE_CONF_fs_defaultFS: hdfs://namenode:8020
+    ports:
+      - "10000:10000"
+    depends_on:
+      - metastore
+
+volumes:
+  namenode:
+  datanode:
+  pgdata:
+
